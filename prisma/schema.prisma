@@ -1,0 +1,70 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id             String            @id @default(cuid())
+  email          String            @unique
+  name           String?
+  createdAt      DateTime          @default(now())
+  socialAccounts SocialAccount[]
+  calendars      ContentCalendar[]
+  analyses       TrendAnalysis[]
+}
+
+model SocialAccount {
+  id             String          @id @default(cuid())
+  platform       String // 'twitter', 'instagram', etc.
+  accessToken    String
+  accessTokenSecret String?
+  refreshToken   String? // Optional refresh token
+  tokenExpiresAt DateTime? // Optional expiration
+  userId         String
+  user           User            @relation(fields: [userId], references: [id])
+  posts          ScheduledPost[]
+
+  @@unique([userId, platform]) // Ensures a user has only one account per platform
+}
+
+model ContentCalendar {
+  id     String          @id @default(cuid())
+  name   String
+  userId String
+  user   User            @relation(fields: [userId], references: [id])
+  posts  ScheduledPost[]
+}
+
+model ScheduledPost {
+  id          String          @id @default(cuid())
+  content     String
+  mediaUrl    String?
+  scheduledAt DateTime
+  postedAt    DateTime?
+  status      String          @default("scheduled") // scheduled/published/failed
+  platform    String
+  calendarId  String
+  calendar    ContentCalendar @relation(fields: [calendarId], references: [id])
+  accountId   String
+  account     SocialAccount   @relation(fields: [accountId], references: [id])
+}
+
+model TrendAnalysis {
+  id        String   @id @default(cuid())
+  keywords  String[]
+  insights  Json // Stores AI-generated analysis
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
