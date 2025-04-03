@@ -7,10 +7,13 @@ const { TwitterApi } = require('twitter-api-v2');
 
 const app = express();
 const prisma = new PrismaClient();
-const PORT = process.env.CRON_PORT || 4000;
+const PORT = process.env.PORT || process.env.CRON_PORT || 4000;
 
 // Middleware
 app.use(express.json());
+
+// Health check endpoint
+app.get('/', (_, res) => { res.status(200).json({ status: 'running' }) });
 
 // Secure API Key verification
 const authenticate = (req, res, next) => {
@@ -23,7 +26,7 @@ const authenticate = (req, res, next) => {
 
 // Scheduled job endpoint
 app.post('/schedule', authenticate, async (req, res) => {
-  const { postId, scheduledAt } = req.body;
+  const { postId, scheduledAt, mediaIds } = req.body;
   
   try {
     // Store in database
@@ -31,7 +34,8 @@ app.post('/schedule', authenticate, async (req, res) => {
       where: { id: postId },
       data: { 
         scheduledAt: new Date(scheduledAt),
-        status: 'scheduled'
+        status: 'scheduled',
+        mediaIds: mediaIds || undefined
       }
     });
 
@@ -62,15 +66,43 @@ const processPosts = async () => {
           accessSecret: post.account.accessTokenSecret
         });
 
-        await twitterClient.v2.tweet(post.content);
-        
+        // Post the tweet
+        const tweetParams = { text: post.content };
+        if (post.mediaIds && post.mediaIds.length > 0) {
+          tweetParams.media = { media_ids: post.mediaIds };
+        }
+        const tweetResponse = await twitterClient.v2.tweet(tweetParams);
+
+        // Get media URL from tweet response if media was attached
+        let mediaUrl = null;
+        if (post.mediaIds && post.mediaIds.length > 0) {
+          try {
+            const tweetDetails = await twitterClient.v2.singleTweet(
+              tweetResponse.data.id,
+              { 
+                "expansions": "attachments.media_keys",
+                "media.fields": "url,preview_image_url" 
+              }
+            );
+            
+            if (tweetDetails.includes?.media?.[0]?.url) {
+              mediaUrl = tweetDetails.includes.media[0].url;
+            }
+          } catch (err) {
+            console.error("Error fetching tweet details:", err);
+          }
+        }
+
+        // Update post with status, posted time, and media URL
         await prisma.scheduledPost.update({
           where: { id: post.id },
           data: { 
-            status: 'posted',
-            postedAt: new Date() 
+            status: 'published',
+            postedAt: new Date(),
+            mediaUrl
           }
         });
+
       } catch (error) {
         console.error(`Failed to post ${post.id}:`, error);
         await prisma.scheduledPost.update({
