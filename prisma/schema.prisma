@@ -34,6 +34,7 @@ model SocialAccount {
   userId         String
   user           User            @relation(fields: [userId], references: [id])
   posts          ScheduledPost[]
+  active         Boolean         @default(true)
 
   @@unique([userId, platform]) // Ensures a user has only one account per platform
 }
@@ -49,6 +50,7 @@ model ContentCalendar {
 model ScheduledPost {
   id          String          @id @default(cuid())
   content     String
+  mediaIds    String[]        @default([])
   mediaUrl    String?
   scheduledAt DateTime
   postedAt    DateTime?
@@ -56,8 +58,8 @@ model ScheduledPost {
   platform    String
   calendarId  String
   calendar    ContentCalendar @relation(fields: [calendarId], references: [id])
-  accountId   String
-  account     SocialAccount   @relation(fields: [accountId], references: [id])
+  accountId   String?
+  account     SocialAccount?   @relation(fields: [accountId], references: [id])
 }
 
 model TrendAnalysis {

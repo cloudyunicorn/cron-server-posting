@@ -3,7 +3,6 @@ const express = require('express');
 const axios = require('axios');
 const cron = require('node-cron');
 const { PrismaClient } = require('@prisma/client');
-const { TwitterApi } = require('twitter-api-v2');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -59,47 +58,12 @@ const processPosts = async () => {
 
     for (const post of duePosts) {
       try {
-        const twitterClient = new TwitterApi({
-          appKey: process.env.TWITTER_APP_KEY,
-          appSecret: process.env.TWITTER_APP_SECRET,
-          accessToken: post.account.accessToken,
-          accessSecret: post.account.accessTokenSecret
-        });
-
-        // Post the tweet
-        const tweetParams = { text: post.content };
-        if (post.mediaIds && post.mediaIds.length > 0) {
-          tweetParams.media = { media_ids: post.mediaIds };
-        }
-        const tweetResponse = await twitterClient.v2.tweet(tweetParams);
-
-        // Get media URL from tweet response if media was attached
-        let mediaUrl = null;
-        if (post.mediaIds && post.mediaIds.length > 0) {
-          try {
-            const tweetDetails = await twitterClient.v2.singleTweet(
-              tweetResponse.data.id,
-              { 
-                "expansions": "attachments.media_keys",
-                "media.fields": "url,preview_image_url" 
-              }
-            );
-            
-            if (tweetDetails.includes?.media?.[0]?.url) {
-              mediaUrl = tweetDetails.includes.media[0].url;
-            }
-          } catch (err) {
-            console.error("Error fetching tweet details:", err);
-          }
-        }
-
-        // Update post with status, posted time, and media URL
+        // Update post with status and posted time (triggering app posting)
         await prisma.scheduledPost.update({
           where: { id: post.id },
           data: { 
             status: 'published',
-            postedAt: new Date(),
-            mediaUrl
+            postedAt: new Date()
           }
         });
 
