@@ -58,12 +58,24 @@ const processPosts = async () => {
 
     for (const post of duePosts) {
       try {
-        // Update post with status and posted time (triggering app posting)
+        // Call the app's API to post the tweet
+        const response = await axios.post(`${process.env.APP_URL}/api/twitter/post`, {
+          content: post.content,
+          mediaIds: post.mediaIds,
+          accountId: post.account.id
+        }, {
+          headers: {
+            'x-api-key': process.env.CRON_API_KEY
+          }
+        });
+
+        // Update post status based on API response
         await prisma.scheduledPost.update({
           where: { id: post.id },
           data: { 
-            status: 'published',
-            postedAt: new Date()
+            status: response.data.success ? 'completed' : 'failed',
+            postedAt: new Date(),
+            ...(response.data.tweetId && { tweetId: response.data.tweetId })
           }
         });
 
